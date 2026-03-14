@@ -748,6 +748,7 @@ export default function HierarchyBoard({ initialDepartments, initialUnassigned }
               deptId="unassigned"
               onSetManager={() => {}}
               onDelete={() => {}}
+              onEdit={() => {}}
               overlay
             />
           )}
