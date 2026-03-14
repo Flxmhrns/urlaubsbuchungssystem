@@ -1,0 +1,111 @@
+// ============================================================
+// Prisma Schema – Urlaubsbuchungssystem
+// Datenbank: SQLite (für einfache lokale Entwicklung)
+// ORM: Prisma
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUM: Benutzerrolle
+// ============================================================
+// Hinweis: SQLite unterstützt keine nativen Enums.
+// Prisma bildet diese als String-Felder ab.
+
+// ============================================================
+// MODEL: Abteilung (Department)
+// ============================================================
+model Department {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+
+  /// Fremdschlüssel zum Abteilungsleiter (optional, da Manager auch
+  /// einer Abteilung zugeordnet sind und Zirkelabhängigkeit vermieden wird)
+  managerId Int?
+
+  // Relationen
+  manager   User?    @relation("DepartmentManager", fields: [managerId], references: [id])
+  employees User[]   @relation("DepartmentEmployees")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("departments")
+}
+
+// ============================================================
+// MODEL: Benutzer (User)
+// ============================================================
+model User {
+  id                Int               @id @default(autoincrement())
+  name              String
+  email             String            @unique
+
+  /// Bcrypt-Hash des Passworts
+  password          String
+
+  /// Rolle: "EMPLOYEE" oder "MANAGER"
+  role              String            @default("EMPLOYEE")
+
+  // Urlaubskontingent
+  vacationDaysTotal Int               @default(30)
+  vacationDaysUsed  Int               @default(0)
+
+  // Fremdschlüssel zur Abteilung
+  departmentId      Int?
+
+  // Relationen
+  department        Department?       @relation("DepartmentEmployees", fields: [departmentId], references: [id])
+  managedDepartment Department[]      @relation("DepartmentManager")
+  vacationRequests  VacationRequest[] @relation("RequestedBy")
+  processedRequests VacationRequest[] @relation("ProcessedBy")
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@map("users")
+}
+
+// ============================================================
+// MODEL: Urlaubsantrag (VacationRequest)
+// ============================================================
+model VacationRequest {
+  id        Int      @id @default(autoincrement())
+
+  // Antragsteller
+  userId    Int
+  user      User     @relation("RequestedBy", fields: [userId], references: [id], onDelete: Cascade)
+
+  // Zeitraum
+  startDate DateTime
+  endDate   DateTime
+
+  /// Status: "PENDING" | "APPROVED" | "REJECTED"
+  status    String   @default("PENDING")
+
+  /// Optionaler Kommentar des Mitarbeiters
+  reason    String?
+
+  /// Optionaler Ablehnungsgrund des Managers
+  rejectionNote String?
+
+  // ── Audit-Log ────────────────────────────────────────────
+  /// Manager, der den Antrag zuletzt bearbeitet hat
+  processedById Int?
+  processedBy   User?    @relation("ProcessedBy", fields: [processedById], references: [id])
+
+  /// Zeitpunkt der Bearbeitung (Genehmigung oder Ablehnung)
+  processedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("vacation_requests")
+}
