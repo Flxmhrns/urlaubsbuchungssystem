@@ -12,6 +12,7 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
 export const config: NextAuthConfig = {
+  trustHost: true,
   providers: [
     Credentials({
       credentials: {
