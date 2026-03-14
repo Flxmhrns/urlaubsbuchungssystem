@@ -55,7 +55,7 @@ export const config: NextAuthConfig = {
      */
     jwt({ token, user }) {
       if (user) {
-        token.id           = user.id;
+        token.id           = user.id ?? "";
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         token.role         = (user as any).role         as string;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
