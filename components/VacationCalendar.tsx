@@ -2,8 +2,9 @@
 /**
  * VacationCalendar – react-big-calendar Monatsansicht
  *
- * Zeigt genehmigte (grün) und ausstehende (amber) Urlaube
- * der Abteilung. Klick auf einen Eintrag öffnet ein Detail-Popover.
+ * Zeigt Urlaube der Abteilung in eindeutigen Farben pro Mitarbeiter.
+ * Genehmigte Events sind vollständig eingefärbt, ausstehende transparent.
+ * Klick auf einen Eintrag öffnet ein Detail-Popover.
  *
  * Wichtig: view + onView + date + onNavigate müssen explizit als
  * kontrollierte Props übergeben werden, damit Woche/Agenda/Navigation
@@ -15,8 +16,24 @@ import type { View }                                 from "react-big-calendar";
 import { format, parse, startOfWeek, getDay }        from "date-fns";
 import { de }                                        from "date-fns/locale";
 import "react-big-calendar/lib/css/react-big-calendar.css";
-import { getEventColor }                             from "@/lib/utils";
 import type { VacationStatus }                       from "@/lib/types";
+
+// ── Farben pro Mitarbeiter ────────────────────────────────────
+const USER_COLORS = [
+  "#2563eb", // blau
+  "#dc2626", // rot
+  "#9333ea", // lila
+  "#ea580c", // orange
+  "#0891b2", // cyan
+  "#db2777", // pink
+  "#65a30d", // hellgrün
+  "#b45309", // braun
+];
+
+function getUserColor(userId: number, sortedUserIds: number[]): string {
+  const idx = sortedUserIds.indexOf(userId);
+  return USER_COLORS[idx % USER_COLORS.length];
+}
 
 // ── date-fns Localizer (Deutsch, Wochenstart Montag) ──────────
 const locales = { "de-DE": de };
@@ -76,6 +93,23 @@ export default function VacationCalendar({ events }: Props) {
   const [currentView, setCurrentView] = useState<View>(Views.MONTH);
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
 
+  // Sortierte Liste eindeutiger UserIds → deterministische Farbzuweisung
+  const sortedUserIds = useMemo(
+    () => [...new Set(events.map((e) => e.userId))].sort((a, b) => a - b),
+    [events],
+  );
+
+  // Mitarbeiter-Legende: userId → { name, color }
+  const userLegend = useMemo(
+    () =>
+      sortedUserIds.map((uid) => ({
+        userId: uid,
+        name:   events.find((e) => e.userId === uid)?.title ?? String(uid),
+        color:  getUserColor(uid, sortedUserIds),
+      })),
+    [sortedUserIds, events],
+  );
+
   // Events in das react-big-calendar Format konvertieren
   const calEvents: CalEvent[] = useMemo(
     () =>
@@ -95,29 +129,35 @@ export default function VacationCalendar({ events }: Props) {
     [events],
   );
 
-  // Event-Styling per Status
-  const eventPropGetter = (event: CalEvent) => ({
-    style: {
-      backgroundColor: getEventColor(event.status),
-      borderColor:     getEventColor(event.status),
-      borderRadius:    "4px",
-      color:           "#fff",
-      fontSize:        "0.75rem",
-      padding:         "1px 4px",
-    },
-  });
+  // Event-Styling per Mitarbeiter; ausstehende Events leicht transparent
+  const eventPropGetter = (event: CalEvent) => {
+    const color = getUserColor(event.userId, sortedUserIds);
+    return {
+      style: {
+        backgroundColor: event.status === "PENDING" ? `${color}99` : color,
+        borderColor:     color,
+        borderRadius:    "4px",
+        color:           "#fff",
+        fontSize:        "0.75rem",
+        padding:         "1px 4px",
+        borderLeft:      event.status === "PENDING" ? `3px dashed ${color}` : undefined,
+      },
+    };
+  };
 
   return (
     <div>
-      {/* Legende */}
-      <div className="flex items-center gap-4 mb-4 text-sm">
-        <div className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: "#16a34a" }} />
-          <span className="text-gray-600">Genehmigt</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: "#d97706" }} />
-          <span className="text-gray-600">Ausstehend</span>
+      {/* Legende: ein Eintrag pro Mitarbeiter */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 text-sm">
+        {userLegend.map(({ userId, name, color }) => (
+          <div key={userId} className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: color }} />
+            <span className="text-gray-600">{name}</span>
+          </div>
+        ))}
+        <div className="flex items-center gap-1.5 border-l pl-4 ml-1">
+          <span className="inline-block w-3 h-3 rounded-sm opacity-60 flex-shrink-0 bg-gray-400" />
+          <span className="text-gray-400 text-xs">transparent = ausstehend</span>
         </div>
       </div>
 
@@ -153,10 +193,10 @@ export default function VacationCalendar({ events }: Props) {
             className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Farbiger Header-Streifen */}
+            {/* Farbiger Header-Streifen in Mitarbeiterfarbe */}
             <div
               className="h-2 rounded-t-xl -mx-6 -mt-6 mb-4"
-              style={{ backgroundColor: getEventColor(selectedEvent.status) }}
+              style={{ backgroundColor: getUserColor(selectedEvent.userId, sortedUserIds) }}
             />
             <h3 className="font-bold text-gray-900 text-lg">{selectedEvent.title}</h3>
             <p className="text-sm text-gray-500 mt-1">
